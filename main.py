@@ -2,35 +2,31 @@ import os
 import re
 from datetime import datetime
 import xml.etree.ElementTree as ET
-from contextlib import asynccontextmanager
 import requests
-import uvicorn
-from dotenv import load_dotenv
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+import streamlit as st
 
-# === Load Secrets from Environment ===
-load_dotenv()
+# === Page Configuration ===
+st.set_page_config(
+    page_title="CVEStrike Control Center",
+    page_icon="🛡️",
+    layout="centered"
+)
 
-API_KEY = os.getenv("API_KEY")
-MODEL = os.getenv("MODEL", "openai/gpt-3.5-turbo")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-PUSHBULLET_TOKEN = os.getenv("PUSHBULLET_TOKEN")
+# === Load Keys (Streamlit Secrets or Environment Variables) ===
+API_KEY = st.secrets.get("API_KEY") or os.getenv("API_KEY")
+MODEL = st.secrets.get("MODEL") or os.getenv("MODEL", "openai/gpt-3.5-turbo")
+TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
+PUSHBULLET_TOKEN = st.secrets.get("PUSHBULLET_TOKEN") or os.getenv("PUSHBULLET_TOKEN")
 
-# === Scheduler Setup ===
-scheduler = BackgroundScheduler()
-
-# === Helper: Clean HTML Tags ===
+# === Helper: HTML Stripper ===
 def clean_html(raw_html):
     if not raw_html:
         return "No Content"
     cleanr = re.compile('<.*?>')
     return re.sub(cleanr, '', raw_html).strip()
 
-# === 1. Fetch CISA Advisories ===
+# === 1. Fetch CISA Feed ===
 def fetch_cyber_news():
     try:
         url = "https://www.cisa.gov/cybersecurity-advisories/all.xml"
@@ -54,7 +50,7 @@ def fetch_cyber_news():
     except Exception as e:
         return f"[❌ XML Parse Error] {e}"
 
-# === 2. Analyze Feed via OpenRouter LLM ===
+# === 2. Analyze via OpenRouter LLM ===
 def analyze_with_model(text):
     if not API_KEY:
         return text
@@ -83,11 +79,10 @@ def analyze_with_model(text):
     except Exception as e:
         return f"[❌ AI Connection Exception] {e}"
 
-# === 3. Dispatch Telegram Alert ===
+# === 3. Send Telegram Alert ===
 def send_telegram(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[!] Skipping Telegram: Token or Chat ID missing in environment variables.")
-        return
+        return False, "Telegram Token or Chat ID missing."
     try:
         payload = {
             "chat_id": TELEGRAM_CHAT_ID.strip(),
@@ -95,14 +90,11 @@ def send_telegram(message):
             "parse_mode": "Markdown"
         }
         res = requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN.strip()}/sendMessage", json=payload, timeout=10)
-        if res.status_code != 200:
-            print(f"[!] Telegram failure: {res.text}")
-        else:
-            print("[+] Telegram alert sent successfully.")
+        return res.status_code == 200, res.text
     except Exception as e:
-        print(f"[❌ Telegram Error] {e}")
+        return False, str(e)
 
-# === 4. Dispatch Pushbullet Alert ===
+# === 4. Send Pushbullet Alert ===
 def send_pushbullet(message):
     if not PUSHBULLET_TOKEN:
         return
@@ -116,102 +108,31 @@ def send_pushbullet(message):
     except Exception as e:
         print(f"[❌ Pushbullet Error] {e}")
 
-# === Pipeline Core Execution ===
-def run_cvestrike_pipeline(trigger_label="Manual"):
-    print(f"\n[⏰ {datetime.now().strftime('%H:%M:%S')}] Executing CVEStrike Pipeline ({trigger_label})...")
-    raw_feed = fetch_cyber_news()
-    if raw_feed.startswith("[❌"):
-        print(raw_feed)
-    else:
-        print("[✔️ CISA Feed Pulled]")
-        summary = analyze_with_model(raw_feed)
-        print("[✔️ LLM Analysis Complete]")
-        send_telegram(summary)
-        send_pushbullet(summary)
-        print("✅ Pipeline execution finished.")
+# === Streamlit Control Panel Interface ===
+st.title("🛡️ CVEStrike Engine")
+st.caption("Automated Vulnerability Research & Threat Intel Center")
 
-# === Schedule Cron Tasks (10:45 AM & 05:30 PM IST) ===
-scheduler.add_job(
-    run_cvestrike_pipeline,
-    CronTrigger(hour=10, minute=45, timezone="Asia/Kolkata"),
-    args=["Morning 10:45 AM Trigger"],
-    id="morning_cve_job"
-)
+st.divider()
 
-scheduler.add_job(
-    run_cvestrike_pipeline,
-    CronTrigger(hour=17, minute=30, timezone="Asia/Kolkata"),
-    args=["Evening 05:30 PM Trigger"],
-    id="evening_cve_job"
-)
+if st.button("⚡ Send Instant Alert Now", type="primary", use_container_width=True):
+    with st.spinner("Executing pipeline: Fetching CISA Feed & Generating LLM Summary..."):
+        raw_feed = fetch_cyber_news()
+        
+        if raw_feed.startswith("[❌"):
+            st.error(raw_feed)
+        else:
+            summary = analyze_with_model(raw_feed)
+            
+            st.subheader("Generated Threat Intel:")
+            st.info(summary)
+            
+            success, response_msg = send_telegram(summary)
+            send_pushbullet(summary)
+            
+            if success:
+                st.success("✅ Threat alert successfully dispatched to Telegram!")
+            else:
+                st.error(f"❌ Telegram Error: {response_msg}")
 
-# === FastAPI Lifespan Handler ===
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    if not scheduler.running:
-        scheduler.start()
-        print("[*] CVEStrike Scheduler started successfully.")
-    yield
-    if scheduler.running:
-        scheduler.shutdown()
-        print("[*] CVEStrike Scheduler stopped cleanly.")
-
-app = FastAPI(title="CVEStrike Engine", version="2.0", lifespan=lifespan)
-
-# === Routes ===
-
-@app.get("/health")
-def health_ping():
-    return {
-        "status": "healthy",
-        "service": "CVEStrike Engine",
-        "system_time": datetime.now().isoformat()
-    }
-
-@app.post("/trigger-now")
-def manual_trigger():
-    run_cvestrike_pipeline("Manual Route Trigger")
-    return {"status": "Pipeline execution completed."}
-
-@app.get("/", response_class=HTMLResponse)
-@app.get("/ui", response_class=HTMLResponse)
-def serve_ui():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>CVEStrike Control Center</title>
-        <style>
-            body { font-family: Arial, sans-serif; background: #0d1117; color: #c9d1d9; padding: 40px; text-align: center; }
-            .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 30px; max-width: 500px; margin: auto; }
-            h1 { color: #58a6ff; margin-bottom: 5px; }
-            button { background: #238636; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin-top: 20px; }
-            button:hover { background: #2ea043; }
-            .info { margin-top: 20px; font-size: 14px; color: #8b949e; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h1>🛡️ CVEStrike Engine</h1>
-            <p>Vulnerability Research & Automated Alert Center</p>
-            <button onclick="triggerAlert()">⚡ Send Instant Alert Now</button>
-            <div id="status" class="info"></div>
-            <hr style="border-color: #30363d; margin-top: 25px;">
-            <p class="info">⏰ Daily Broadcasts: <b>10:45 AM</b> & <b>05:30 PM IST</b></p>
-            <p class="info">💚 Keep-Alive Endpoint: <code>/health</code></p>
-        </div>
-        <script>
-            function triggerAlert() {
-                document.getElementById('status').innerText = 'Triggering alert pipeline...';
-                fetch('/trigger-now', { method: 'POST' })
-                    .then(res => res.json())
-                    .then(data => { document.getElementById('status').innerText = '✅ Alert Sent!'; })
-                    .catch(err => { document.getElementById('status').innerText = '❌ Error executing trigger'; });
-            }
-        </script>
-    </body>
-    </html>
-    """
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+st.divider()
+st.markdown("⏰ **Scheduled Timings (When deployed as Daemon):** `10:45 AM` & `05:30 PM IST`")
