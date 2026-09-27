@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests streamlit
+          pip install requests
 
       - name: Execute CVEStrike Pipeline
         env:
@@ -32,4 +32,4 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python -c "from app import run_pipeline; print(run_pipeline())"
+          python bot.py
