@@ -3,13 +3,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
-# Safe environment loader for both Local & GitHub Actions
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
+# GitHub Actions directly provides secrets as environment variables
 API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL = os.environ.get("MODEL", "openai/gpt-3.5-turbo")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
