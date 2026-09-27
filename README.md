@@ -1,97 +1,54 @@
+# CVEStrike Bot 🛡️
 
+An automated bot that fetches the latest CVE (Common Vulnerabilities and Exposures) alerts and sends them to your Telegram channel and Pushbullet, powered by an LLM (via OpenRouter) for summarization/analysis.
 
-# CVESTRIKE Bot 🔐📡
-A daily cybersecurity intelligence bot that:
-- Fetches latest CISA security alerts
-- Summarizes them using a local LLM via OpenRouter
-- Sends formatted threat reports to Telegram & Pushbullet
+## ⚙️ Configuration
 
----
+Create a `.env` file in the project root with the following variables:
 
-## 🧠 Features
-- CISA RSS Feed parsing (top threat intel)
-- Secure LLM analysis (e.g. Mistral via OpenRouter)
-- Telegram channel updates (Markdown formatted)
-- Optional Pushbullet push notifications
-- Fully automatable (PythonAnywhere scheduling supported)
+```env
+OPENROUTER_API_KEY=your_openrouter_api_key
+MODEL=mistralai/mistral-7b-instruct
+TELEGRAM_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=@your_channel_username
+PUSHBULLET_TOKEN=your_pushbullet_access_token
+```
 
----
+> **Security Note:** Always add `.env` to your `.gitignore` file to protect your API keys.
 
-## 🔐 Setup Secure Environment (.env)
+## 💻 Local Setup & Execution
 
-Create a `.env` file in your project root directory:
-
-OPENROUTER_API_KEY=your_openrouter_api_key MODEL=mistralai/mistral-7b-instruct TELEGRAM_TOKEN=your_telegram_bot_token TELEGRAM_CHAT_ID=@your_channel_username PUSHBULLET_TOKEN=your_pushbullet_access_token
-
-**Important**: Add `.env` to `.gitignore` to avoid exposing your keys!
-
-.env
-
----
-
-## 💻 Run Locally
-
-1. Install dependencies:
+**Install dependencies:**
 ```bash
 pip install requests python-dotenv
+```
 
-2. Run the bot:
-
-
-
+**Run the bot:**
+```bash
 python3 cvestrike_bot.py
+```
 
+## 🌐 PythonAnywhere Deployment Guide
 
----
+1. Create a free account on [PythonAnywhere](https://www.pythonanywhere.com).
+2. Upload `cvestrike_bot.py` and your `.env` file to your Files section.
+3. Open a Bash console and install the required packages:
+   ```bash
+   pip3 install --user requests python-dotenv
+   ```
+4. Configure daily execution under the **Tasks** tab using scheduled cron jobs:
 
-🌐 Deploy on PythonAnywhere (Free Hosting)
+   | Alert | Time (IST) | Time (UTC) | Command |
+   |---|---|---|---|
+   | Morning Alert | 10:00 AM | 04:30 | `python3 /home/YOUR_USERNAME/cvestrike_bot.py` |
+   | Evening Alert | 6:00 PM | 12:30 | `python3 /home/YOUR_USERNAME/cvestrike_bot.py` |
 
-1. nanywhere.com
+## 📲 Join Our Community
 
+Stay updated with real-time cybersecurity threat intel:
 
-2. Upload:
+➡️ **Telegram Channel:** [@CVESTRIKE](https://t.me/CVESTRIKE)
 
-cvestrike_bot.py
+## 📄 License
 
-.env
-
-
-
-3. In the Bash Console, install required libraries:
-
-
-
-pip3 install --user requests python-dotenv
-
-
----
-
-⏰ Step 4: Schedule Cyber Alerts (Daily)
-
-Go to the Tasks page on PythonAnywhere and schedule:
-
-Morning Alert (10:00 AM IST → 04:30 UTC)
-
-python3 /home/YOUR_USERNAME/cvestrike_bot.py
-
-Evening Alert (6:00 PM IST → 12:30 UTC)
-
-python3 /home/YOUR_USERNAME/cvestrike_bot.py
-
-✅ You now have an automated threat intel bot!
-
-
----
-
-📲 Join Our Channel
-
-Stay ahead of cyber threats:
-
-➡️ https://t.me/CVESTRIKE
-
-
----
-
-📄 License
-
-MIT License — for educational, awareness, and research purposes.
+Distributed under the **MIT License**. Developed for educational, awareness, and research purposes.
