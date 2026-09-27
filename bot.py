@@ -3,11 +3,16 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
-# GitHub Actions directly provides secrets as environment variables
+# Environment Variables from GitHub Secrets
 API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL = os.environ.get("MODEL", "openai/gpt-3.5-turbo")
+
+# Telegram Secrets
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+# Pushbullet Secret
+PUSHBULLET_API_KEY = os.environ.get("PUSHBULLET_API_KEY")
 
 def clean_html(raw_html):
     import re
@@ -31,7 +36,7 @@ def fetch_and_filter_advisories():
         root = ET.fromstring(res.content)
         filtered_items = []
         
-        for item in root.findall('.//item')[:40]:
+        for item in root.findall('.//item')[:30]:
             title = item.find('title')
             desc = item.find('description')
             link = item.find('link')
@@ -61,6 +66,8 @@ def analyze_with_ai(items):
     for idx, item in enumerate(items, 1):
         formatted_feed += f"\n{idx}. Title: {item['title']}\nSummary: {item['summary']}\nLink: {item['link']}\n"
     
+    current_time = datetime.now().strftime("%d %b %Y | %H:%M IST")
+    
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
@@ -69,8 +76,14 @@ def analyze_with_ai(items):
     payload = {
         "model": MODEL,
         "messages": [
-            {"role": "system", "content": "You are a senior offensive security researcher. Analyze these vulnerabilities and create an executive threat summary."},
-            {"role": "user", "content": f"Analyze these advisories and summarize high-impact threats:\n{formatted_feed}"}
+            {
+                "role": "system", 
+                "content": "You are a senior offensive security threat intelligence analyst. Format the output cleanly with numbers, bold titles, Severity Rating, Impact, and Mitigation. Do not include extra conversational filler."
+            },
+            {
+                "role": "user", 
+                "content": f"Current Time: {current_time}\nAnalyze these advisories and create a structured threat intelligence report:\n{formatted_feed}"
+            }
         ],
         "temperature": 0.2
     }
@@ -79,7 +92,9 @@ def analyze_with_ai(items):
         res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=50)
         res_json = res.json()
         if "choices" in res_json and len(res_json["choices"]) > 0:
-            return res_json["choices"][0]["message"]["content"].strip()
+            ai_content = res_json["choices"][0]["message"]["content"].strip()
+            final_report = f"🔥 *CVEStrike Threat Intelligence Alert*\n🕒 `{current_time}`\n\n{ai_content}"
+            return final_report
     except Exception as e:
         print(f"❌ AI Request Error: {e}")
     return None
@@ -91,7 +106,7 @@ def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN.strip()}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID.strip(),
-        "text": f"🚨 **CVESTRIKE Threat Intelligence** 🚨\n\n{message}",
+        "text": message,
         "parse_mode": "Markdown"
     }
     
@@ -100,6 +115,32 @@ def send_telegram(message):
         return res.status_code == 200
     except Exception as e:
         print(f"❌ Telegram Error: {e}")
+        return False
+
+def send_pushbullet(message):
+    if not PUSHBULLET_API_KEY or not message:
+        print("ℹ️ Pushbullet API key not found, skipping.")
+        return False
+    
+    url = "https://api.pushbullet.com/v2/pushes"
+    headers = {
+        "Access-Token": PUSHBULLET_API_KEY.strip(),
+        "Content-Type": "application/json"
+    }
+    
+    # Pushbullet ke liye thoda clean text (markdown symbols hata kar)
+    clean_msg = message.replace('*', '').replace('`', '')
+    payload = {
+        "type": "note",
+        "title": "🔥 CVEStrike Threat Intelligence Alert",
+        "body": clean_msg
+    }
+    
+    try:
+        res = requests.post(url, headers=headers, json=payload, timeout=15)
+        return res.status_code == 200
+    except Exception as e:
+        print(f"❌ Pushbullet Error: {e}")
         return False
 
 def run_pipeline():
@@ -114,12 +155,20 @@ def run_pipeline():
         print("⚠️ Advisories evaluated, but AI analysis failed.")
         return "AI analysis failed."
     
-    success = send_telegram(summary)
-    if success:
-        print("✅ Threat intelligence successfully dispatched!")
+    # Send via Telegram
+    tg_success = send_telegram(summary)
+    if tg_success:
+        print("✅ Telegram alert dispatched successfully!")
+    
+    # Send via Pushbullet
+    pb_success = send_pushbullet(summary)
+    if pb_success:
+        print("✅ Pushbullet alert dispatched successfully!")
+        
+    if tg_success or pb_success:
         return "Success"
     else:
-        print("❌ Telegram Delivery Failed.")
+        print("❌ All Deliveries Failed.")
         return "Delivery failed"
 
 if __name__ == "__main__":
