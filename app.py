@@ -240,3 +240,7 @@ st.write(
     " scheduled times and pings the app health route every 5 minutes to prevent"
     " sleep on hosting platforms.*"
 )
+
+if __name__ == "__main__":
+    run_pipeline()
+    
