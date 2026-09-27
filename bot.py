@@ -2,10 +2,13 @@ import os
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from dotenv import load_dotenv
 
-# Load Environment Variables
-load_dotenv()
+# Safe environment loader for both Local & GitHub Actions
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL = os.environ.get("MODEL", "openai/gpt-3.5-turbo")
