@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests
+          pip install requests python-dotenv
 
       - name: Execute CVEStrike Pipeline
         env:
